@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LetMeDoit - RoboBin</title>
+    <!-- PWA Meta Tags -->
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="manifest" href="/manifest.json">
+
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Inter Font -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap">
+    <!-- Phosphor Icons for a clean, modern look -->
+    <script src="https://unpkg.com/phosphor-icons"></script>
+    <!-- QR Code library -->
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f0fdf4; /* A lighter green for the "green earth" concept */
+        }
+        .container-shadow {
+            box-shadow: 0 10px 25px -3px rgba(34, 197, 94, 0.2), 0 4px 6px -2px rgba(34, 197, 94, 0.1);
+        }
+        .qr-canvas {
+          max-width: 100%;
+          height: auto;
+        }
+        /* Custom class for height alignment */
+        .h-pay-button {
+          height: 3.25rem; /* This matches the py-3 (12px) + text-lg (20px) + py-3 (12px) of the button */
+        }
+        @media (max-width: 640px) {
+            .mobile-flex-col > div {
+                flex-basis: 100%;
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen flex items-center justify-center p-4">
+
+    <div class="bg-white rounded-2xl container-shadow p-8 max-w-lg w-full flex flex-col gap-6">
+
+        <h1 class="text-xl font-extrabold text-center text-green-800 drop-shadow-sm">ALUVA MUNCIPALIY | ROBO-BIN 🌱</h1>
+
+        <!-- Input Controls in a two-column compact layout -->
+        <div id="inputSection" class="bg-emerald-50 rounded-xl p-6 space-y-4">
+            <div class="flex flex-col sm:flex-row items-center gap-4">
+                <div class="flex-1">
+                    <label for="rateInput" class="text-emerald-800 font-medium whitespace-nowrap block mb-1">Rate per KG (₹):</label>
+                    <input type="number" id="rateInput" placeholder="Default: 7" class="p-3 border border-emerald-300 rounded-lg w-full focus:ring-emerald-500 focus:border-emerald-500 transition duration-200">
+                    <p id="rateError" class="text-red-500 text-sm italic hidden mt-1">Please enter a valid rate.</p>
+                </div>
+                <div class="flex-1">
+                    <label for="weightInput" class="text-emerald-800 font-medium whitespace-nowrap block mb-1">Waste Weight (KG):</label>
+                    <input type="number" id="weightInput" placeholder="Enter weight" max="10000000" class="p-3 border border-emerald-300 rounded-lg w-full focus:ring-emerald-500 focus:border-emerald-500 transition duration-200">
+                    <div id="costError" class="text-red-500 text-sm italic hidden mt-1">Please enter a valid weight.</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Payment Info & Button in two rows -->
+        <div id="paymentSection" class="flex flex-col items-center justify-between gap-4 bg-emerald-100 rounded-xl p-6">
+            <div class="flex-1 w-full">
+                 <div class="h-pay-button flex items-center justify-center text-center text-3xl font-bold text-emerald-800 bg-emerald-200 p-3 rounded-lg w-full">
+                    <span id="costDisplay">₹ 0.00</span>
+                </div>
+            </div>
+            <button id="generateQR" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-6 rounded-lg shadow-md transition duration-300 ease-in-out transform hover:scale-105 flex items-center justify-center gap-2 whitespace-nowrap w-full">
+                <i class="ph-bold ph-credit-card text-xl"></i>
+                Pay
+            </button>
+        </div>
+
+
+        <!-- QR Code Container -->
+        <div id="qrContainer" class="flex flex-col items-center justify-center p-6 bg-emerald-50 rounded-lg shadow-inner border border-emerald-200 hidden">
+            <div class="flex items-center justify-center gap-4 mb-4 text-emerald-700 font-semibold text-center text-sm sm:text-base">
+                <span class="flex items-center gap-1"><i class="ph-bold ph-chart-line-up text-lg"></i> <span id="finalRateDisplay"></span>/KG</span>
+                <span class="flex items-center gap-1"><i class="ph-bold ph-scales text-lg"></i> <span id="finalWeightDisplay"></span>KG</span>
+                <span class="flex items-center gap-1"><i class="ph-bold ph-currency-inr text-lg"></i> <span id="finalCostDisplay"></span></span>
+            </div>
+            <div id="qrcode" class="w-full max-w-xs aspect-square border-4 border-emerald-400 p-2 rounded-lg flex items-center justify-center"></div>
+            <p class="mt-4 text-center text-xs font-bold text-emerald-800">Scan to complete the payment</p>
+            <div id="resetButtonContainer" class="flex justify-center mt-4">
+                 <button id="resetApp" class="bg-gray-400 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-300 ease-in-out flex items-center gap-2 text-xs">
+                    <i class="ph-bold ph-arrow-counter-clockwise text-lg"></i>
+                    Reset
+                </button>
+            </div>
+        </div>
+        
+        <!-- Powered by info -->
+        <div class="mt-8 flex flex-col items-center justify-center text-center text-xs text-gray-500">
+            <p class="mb-1">Powered by LetMeDoit Technologies</p>
+            <a href="https://www.letmedoit.in" target="_blank" class="inline-block">
+                <img src="https://www.letmedoit.in/Images/Logos/lmdi_logo.png" alt="LetMeDoit Logo" class="h-10 w-auto">
+            </a>
+            <a href="www.letmedoit.in" target="_blank" class="underline hover:text-gray-700 block mt-1">www.letmedoit.in</a>
+        </div>
+
+
+        <!-- Message Box for Feedback -->
+        <div id="messageBox" class="mt-4 p-4 text-center bg-emerald-100 rounded-lg text-emerald-700 border border-emerald-300 hidden"></div>
+
+    </div>
+    
+    <script>
+        // Register service worker for PWA
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js').then(registration => {
+                    console.log('ServiceWorker registration successful with scope: ', registration.scope);
+                }, err => {
+                    console.log('ServiceWorker registration failed: ', err);
+                });
+            });
+        }
+        
+        document.addEventListener('DOMContentLoaded', () => {
+            const rateInput = document.getElementById('rateInput');
+            const weightInput = document.getElementById('weightInput');
+            const costDisplay = document.getElementById('costDisplay');
+            const finalCostDisplay = document.getElementById('finalCostDisplay');
+            const finalWeightDisplay = document.getElementById('finalWeightDisplay');
+            const finalRateDisplay = document.getElementById('finalRateDisplay');
+            const generateQRBtn = document.getElementById('generateQR');
+            const qrContainer = document.getElementById('qrContainer');
+            const qrcodeDiv = document.getElementById('qrcode');
+            const messageBox = document.getElementById('messageBox');
+            const rateError = document.getElementById('rateError');
+            const costError = document.getElementById('costError');
+            const resetButton = document.getElementById('resetApp');
+            const resetButtonContainer = document.getElementById('resetButtonContainer');
+            const inputSection = document.getElementById('inputSection');
+            const paymentSection = document.getElementById('paymentSection');
+
+            const MERCHANT_ID_YBL = 'vijayavedamshibu@okaxis';
+            const MERCHANT_NAME = 'ALUVA MUNCIPALITY - COMMUNITY LEVEL DBO PROJECT';
+            const DEFAULT_RATE = 7;
+            const MAX_WEIGHT = 10000000;
+
+            // Function to show a message in the message box
+            const showMessage = (msg, isError = false) => {
+                messageBox.textContent = msg;
+                messageBox.classList.remove('hidden', 'bg-red-100', 'text-red-700', 'bg-emerald-100', 'text-emerald-700');
+                if (isError) {
+                    messageBox.classList.add('bg-red-100', 'text-red-700');
+                } else {
+                    messageBox.classList.add('bg-emerald-100', 'text-emerald-700');
+                }
+            };
+
+            // Function to update cost
+            const updateCost = () => {
+                const rate = parseFloat(rateInput.value) || DEFAULT_RATE;
+                const weight = parseFloat(weightInput.value);
+
+                if (isNaN(weight) || weight <= 0) {
+                    costDisplay.textContent = '₹ 0.00';
+                    return;
+                }
+                const totalCost = (weight * rate).toFixed(2);
+                costDisplay.textContent = `₹ ${totalCost}`;
+            };
+
+            // Reset the app to its initial state
+            const resetApp = () => {
+                rateInput.value = '';
+                weightInput.value = '';
+                costDisplay.textContent = '₹ 0.00';
+                finalCostDisplay.textContent = '';
+                finalWeightDisplay.textContent = '';
+                finalRateDisplay.textContent = '';
+                qrContainer.classList.add('hidden');
+                messageBox.classList.add('hidden');
+                rateError.classList.add('hidden');
+                costError.classList.add('hidden');
+                //resetButtonContainer.classList.add('hidden');
+                inputSection.classList.remove('hidden');
+                paymentSection.classList.remove('hidden');
+                weightInput.focus();
+            };
+
+            // Event listeners
+            rateInput.addEventListener('input', updateCost);
+            weightInput.addEventListener('input', () => {
+                const weight = parseFloat(weightInput.value);
+                if (weight > MAX_WEIGHT) {
+                    costError.textContent = `Weight cannot exceed ${MAX_WEIGHT} kg.`;
+                    costError.classList.remove('hidden');
+                    weightInput.value = MAX_WEIGHT;
+                } else {
+                    costError.classList.add('hidden');
+                }
+                updateCost();
+            });
+            resetButton.addEventListener('click', resetApp);
+
+            generateQRBtn.addEventListener('click', () => {
+                const rate = parseFloat(rateInput.value) || DEFAULT_RATE;
+                const weight = parseFloat(weightInput.value);
+
+                if (isNaN(rate) || rate <= 0) {
+                    rateError.classList.remove('hidden');
+                    return;
+                } else {
+                    rateError.classList.add('hidden');
+                }
+
+                if (isNaN(weight) || weight <= 0) {
+                    costError.textContent = 'Please enter a valid weight.';
+                    costError.classList.remove('hidden');
+                    return;
+                } else {
+                    costError.classList.add('hidden');
+                }
+
+                const totalCost = (weight * rate).toFixed(2);
+                
+                finalCostDisplay.textContent = `${totalCost}`;
+                finalWeightDisplay.textContent = weight;
+                finalRateDisplay.textContent = `${rate}`;
+
+                const upiId = MERCHANT_ID_YBL;
+                const upiLink = `upi://pay?pa=${upiId}&pn=${MERCHANT_NAME}&am=${totalCost}&cu=INR`;
+                
+                qrcodeDiv.innerHTML = '';
+                const canvas = document.createElement('canvas');
+                
+                const containerSize = Math.min(qrcodeDiv.offsetWidth, qrcodeDiv.offsetHeight);
+                canvas.width = containerSize;
+                canvas.height = containerSize;
+                qrcodeDiv.appendChild(canvas);
+                
+                // Hide input and payment sections
+                inputSection.classList.add('hidden');
+                paymentSection.classList.add('hidden');
+
+                try {
+                    QRCode.toCanvas(canvas, upiLink, { width: containerSize, errorCorrectionLevel: 'H' }, function (error) {
+                        if (error) {
+                            showMessage('Error generating QR code.', true);
+                            console.error(error);
+                        } else {
+                            qrContainer.classList.remove('hidden');
+                            // Hide message box on success
+                            messageBox.classList.add('hidden');
+                            
+                            // Ensure the content fits within the screen
+                            const qrCodeRect = qrContainer.getBoundingClientRect();
+                            if (qrCodeRect.bottom > window.innerHeight) {
+                                window.scrollTo(0, document.body.scrollHeight);
+                            }
+                        }
+                    });
+                } catch (error) {
+                    showMessage('Error generating QR code. Make sure the QR code library is loaded.', true);
+                    console.error(error);
+                }
+            });
+
+            // Set initial focus on the weight input for a smooth start
+            weightInput.focus();
+        });
+    </script>
+</body>
+</html>
