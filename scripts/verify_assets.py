@@ -37,8 +37,8 @@ for fname in ('ssd_mobilenetv1_model','face_landmark_68_model','face_recognition
  for shard in shards:
   if not (manifest.parent/shard).is_file():sys.exit(f'Unresolved weight shard {shard} in {fname}')
 if root == Path('.'):
- (root/'assets-manifest.json').write_text(json.dumps({'built':True,'sdk':'1.0.0','files':files},indent=2))
+ (root/'assets-manifest.json').write_text(json.dumps({'built':True,'sdk':'1.1.0','files':files},indent=2))
 else:
  p=root/'assets-manifest.json'
- if not p.is_file() or json.loads(p.read_text()).get('sdk')!='1.0.0':sys.exit('Missing/old final asset manifest')
+ if not p.is_file() or json.loads(p.read_text()).get('sdk')!='1.1.0':sys.exit('Missing/old final asset manifest')
 print(f'OK: {len(files)} self-hosted asset files verified, {sum(x["bytes"] for x in files)/1e6:.1f} MB')

@@ -1,8 +1,16 @@
-# FaceCheck SDK v1.0 — reusable face matching + guided motion demo
+# FaceCheck SDK v1.1 — reusable face matching + guided motion demo
 
 **Live demo:** deploy this project as a GitHub Pages repository. **Built: 22 October 2026.**
 
 This is a local-first, vanilla JavaScript SDK with a React integration example and a user-friendly standalone page. **It is an MVP and is not official biometric identity authentication or presentation-attack detection.** Photos and videos displayed to a camera, manipulated camera feeds and deepfakes may defeat gesture-based liveness. Do not use this as sole access, employment, financial or government identity evidence.
+
+## v1.1 update — missing-library repair and inline reference selfie
+
+**Root cause of the screenshot error:** the source ZIP intentionally contains an empty `assets/vendor/` and `assets/models/` directory. A simple branch-based GitHub Pages publish serves the interface but returns 404 for `assets/vendor/face-api.min.js`. **Select GitHub Actions** as the Pages source. The packaged build downloads the libraries and models and refuses to deploy if files are missing.
+
+**New camera UX:** On **Take selfie** in Step 1, the front camera opens immediately **inside the Reference face card**. The user sees a larger portrait, oval positioning guide, **Use this selfie**, and **Cancel**. If the photo has no usable face or includes multiple people, the camera remains open and suggests how to retake it. Successful capture fills the reference preview and closes only that camera.
+
+**Health panel:** FaceCheck now checks the versioned `assets-manifest.json` and core library/model paths, explains incomplete deployment at the top of the page, and offers **Clear app cache & reload**.
 
 ## What works
 
@@ -21,6 +29,17 @@ This is a local-first, vanilla JavaScript SDK with a React integration example a
 4. Go to **Actions → Publish FaceCheck SDK demo**. It runs automatically on a push to main, or choose `Run workflow`.
 5. The workflow downloads the pinned face-api.js, MediaPipe and face models, verifies all expected files, and publishes a complete `dist` folder. **No model files are bundled in the source ZIP**; GitHub Actions builds them. A red build is not a deployed working site.
 6. Open `https://<your-GitHub-user>.github.io/facecheck-sdk/` over HTTPS and allow camera permissions. Ensure page loads; compare images and test live movements.
+
+### If you see “Missing offline library: vendor/face-api.min.js”
+
+1. In your GitHub repository, confirm `.github/workflows/deploy.yml` exists (the dot and folders matter).
+2. **Settings → Pages → Build and deployment → Source: GitHub Actions.** Do NOT choose Deploy from a branch.
+3. In **Actions → Publish FaceCheck SDK demo**, run the workflow against `main`. The build and deploy jobs must both turn green.
+4. Visit `https://YOURNAME.github.io/REPO/assets-manifest.json` — it must contain `"built": true` and `"sdk": "1.1.0"`.
+5. Visit `https://YOURNAME.github.io/REPO/assets/vendor/face-api.min.js` — it must return JavaScript, not 404 or an HTML error page.
+6. Reload the app and select **Check again**. If an earlier deployment remains cached, click **Clear app cache & reload**.
+
+The source ZIP is **not air-gapped**. It requires the GitHub build to retrieve binary weights once. After deployment they are hosted under your own GitHub Pages origin and eligible for offline caching on a subsequent visit.
 
 For local dev (macOS Terminal with network for initial setup):
 
@@ -77,4 +96,4 @@ git push -u origin main
 
 If you upload through GitHub's browser interface, hidden `.github` can be missed. Without `.github/workflows/deploy.yml` the site will not include face models. Do not copy only `index.html`: the SDK requires all `src/` and `styles/` files, while AI assets are downloaded by the workflow.
 
-**To verify:** after a successful workflow, visit `/facecheck-sdk/assets-manifest.json`. Expect `"built": true`, `"sdk": "1.0.0"`, plus the manifest listing the locally-hosted model files. The script fails deployment if assets are absent.
+**To verify:** after a successful workflow, visit `/facecheck-sdk/assets-manifest.json`. Expect `"built": true`, `"sdk": "1.1.0"`, plus the manifest listing the locally-hosted model files. The script fails deployment if assets are absent.

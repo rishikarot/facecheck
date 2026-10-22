@@ -1,6 +1,6 @@
 {
   "name":"@example/facecheck-sdk-demo",
-  "version":"1.0.0",
+  "version":"1.1.0",
   "private":true,
   "type":"module",
   "description":"Local-first face comparison and guided liveness SDK demo",

@@ -1,4 +1,4 @@
-/** FaceCheck Engine v1.0 — local-only face detection / matching / guided-motion prototype.
+/** FaceCheck Engine v1.1 — local-only face detection / matching / guided-motion prototype.
  * Not official authentication. No PAD certification; can be fooled by replay to camera.
  */
 export const DEFAULT_POLICY = Object.freeze({
@@ -29,7 +29,7 @@ export function normalizePolicy(policy={}){
 }
 export class FaceCheckEngine{
   constructor(opts={}){this.baseUrl=new URL(opts.baseUrl||'./assets/',document.baseURI);this.policy=normalizePolicy(opts.policy);this.faceApi=null;this.mp=null;this.mpPromise=null;this.facePromise=null;this.challenge=null;this.reference=null;this.lastData=null;}
-  async loadScript(path,check){if(check())return;await new Promise((resolve,reject)=>{let s=document.createElement('script');s.src=new URL(path,this.baseUrl).href;s.onload=()=>check()?resolve():reject(new Error('Local library did not initialize: '+path));s.onerror=()=>reject(new Error('Missing offline library: '+path));document.head.appendChild(s);});}
+  async loadScript(path,check){if(check())return;await new Promise((resolve,reject)=>{let s=document.createElement('script');s.src=new URL(path,this.baseUrl).href;s.onload=()=>check()?resolve():reject(new Error('Local library did not initialize: '+path));s.onerror=()=>reject(new Error('Offline model file unavailable: '+new URL(path,this.baseUrl).pathname+'. Please verify the GitHub Pages Actions deployment, not branch deployment.'));document.head.appendChild(s);});}
   async faceModels(){if(this.facePromise)return this.facePromise;this.facePromise=(async()=>{
     await this.loadScript('vendor/face-api.min.js',()=>!!window.faceapi);
     const api=window.faceapi,base=new URL('models/',this.baseUrl).href;
