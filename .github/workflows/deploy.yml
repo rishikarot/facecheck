@@ -15,6 +15,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Prevent competing GitHub Pages branch deployments
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: python3 scripts/check_pages_source.py
       - name: Test SDK logic
         run: node --test tests/*.test.mjs
       - name: Download pinned local AI models
@@ -23,7 +28,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist
-          cp index.html main.js sw.js assets-manifest.json dist/
+          cp index.html main.js sw.js package.json assets-manifest.json dist/
           touch dist/.nojekyll
           cp -R src styles assets dist/
       - name: Fail on missing SDK files or AI models
@@ -41,3 +46,12 @@ jobs:
     steps:
       - uses: actions/deploy-pages@v4
         id: deployment
+      - uses: actions/checkout@v4
+      - name: Confirm the published site contains its AI assets
+        env:
+          PAGE_URL: ${{ steps.deployment.outputs.page_url }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          EXPECTED_VERSION="$(node -p "require('./package.json').version")"
+          python3 scripts/smoke_deployment.py --url "$PAGE_URL" --version "$EXPECTED_VERSION" --run-id "$GITHUB_RUN_ID"
