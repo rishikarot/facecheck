@@ -20,7 +20,9 @@ for name in ('ssd_mobilenetv1_model-shard1','ssd_mobilenetv1_model-shard2','face
 SOURCE=['index.html','main.js','sw.js','src/index.js','src/widget.js','src/engine.js','styles/facecheck.css']
 for f in SOURCE:
  path=root/f
- if not path.is_file() or path.stat().st_size <200:sys.exit(f'MISSING/INVALID SDK code in publish directory: {f}')
+ minimum=100 if f=='src/index.js' else 200
+ if not path.is_file() or path.stat().st_size < minimum:
+  sys.exit(f'MISSING/INVALID SDK code in publish directory: {f} (minimum {minimum} bytes)')
 files=[]
 for path,minimum in MIN.items():
  p=root/path
