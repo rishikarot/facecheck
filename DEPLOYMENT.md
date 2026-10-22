@@ -1,6 +1,6 @@
 # Deploy FaceCheck SDK v1.1.0 to GitHub Pages
 
-1. Create an empty repository (or update your existing FaceCheck repository). Example name: `facecheck-sdk`.
+1. Create an empty repository (or update your existing FaceCheck repository). Example name: `facecheck`.
 2. Extract `FaceCheck_SDK_v1_1_GitHub_Ready.zip`. Upload the **contents** to the repository root; include the hidden `.github/workflows/deploy.yml` directory. Use `git add -A && git commit && git push` for reliable nested folders.
 3. GitHub repository **Settings → Pages → Source → GitHub Actions**. Do not use branch publishing.
 4. Open **Actions → Publish FaceCheck SDK demo** and run it on `main`. The build fetches local model binaries, produces `assets-manifest.json`, verifies all assets and deploys `dist`.

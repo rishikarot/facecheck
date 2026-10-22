@@ -1,5 +1,5 @@
-/* FaceCheck SDK 1.1: static same-origin cache ONLY. No user photos/frames. */
-const CACHE='facecheck-sdk-v1.1-static';
+/* FaceCheck SDK 1.2: static same-origin cache ONLY. No user photos/frames. */
+const CACHE='facecheck-sdk-v1.2-static';
 const STATIC=['./','./index.html','./main.js','./styles/facecheck.css','./src/index.js','./src/widget.js','./src/engine.js','./assets-manifest.json',
 './assets/vendor/face-api.min.js','./assets/vendor/mediapipe/vision_bundle.mjs',
 './assets/vendor/mediapipe/wasm/vision_wasm_internal.js','./assets/vendor/mediapipe/wasm/vision_wasm_internal.wasm',

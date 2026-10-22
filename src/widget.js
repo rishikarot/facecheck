@@ -13,6 +13,7 @@ const SVG={
  camera:'<rect x="2" y="6" width="20" height="15" rx="3"/><circle cx="12" cy="13.5" r="4"/><path d="M8 6 9 3h6l1 3"/>',
  upload:'<path d="M12 16V3m-4 4 4-4 4 4M4 17v4h16v-4"/>',
  refresh:'<path d="M20 6v5h-5M4 18v-5h5M5.5 9a7 7 0 0 1 12-2L20 11M4 13l2.5 4a7 7 0 0 0 12-2"/>',
+ users:'<circle cx="9" cy="8" r="3"/><path d="M3 20v-2a6 6 0 0 1 12 0v2M17 11a3 3 0 0 0 0-6m2 15v-2a6 6 0 0 0-2.3-4.7"/>',
  shield:'<path d="m12 2 9 4v6c0 6-4 9-9 10-5-1-9-4-9-10V6z"/><path d="m8 12 3 3 5-6"/>'
 };
 function icon(id,size=16){return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${SVG[id]}</svg>`;}
@@ -25,14 +26,14 @@ export class FaceCheckWidget extends EventTarget{
     if(!this.el)throw Error('FaceCheck container not found');
     this.engine=new FaceCheckEngine({baseUrl,policy});this.policy=this.engine.policy;
     this.showReferencePicker=showReferencePicker;this.onResult=onResult;this.onProgress=onProgress;
-    this.mode='live';this.camera=null;this.referenceCamera=null;this.cameraMode=null;this.raf=0;this.run=0;this.retry=0;this.state='idle';this.actionOrder=[];this.finished=[];this.lastHint='';this.lastAction='';this.latestResult=null;
+    this.mode='live';this.camera=null;this.referenceCamera=null;this.groupCamera=null;this.groupBusy=false;this.groupToken=0;this.cameraMode=null;this.raf=0;this.run=0;this.retry=0;this.state='idle';this.actionOrder=[];this.finished=[];this.lastHint='';this.lastAction='';this.latestResult=null;
     this.render();this.bind();
   }
   emit(type,detail){this.dispatchEvent(new CustomEvent(type,{detail}));if(type==='result')this.onResult?.(detail);if(type==='progress')this.onProgress?.(detail);}
   n(id){return $(this.el,id);}
   render(){this.el.classList.add('facecheck-root');this.el.innerHTML=`
   <section class="fc-layout" aria-label="FaceCheck demo">
-   <div class="fc-intro"><div class="fc-logo"><span class="fc-logo-mark">◉</span><div><strong>FaceCheck</strong><small>Face matching & guided liveness</small></div></div><span class="fc-version">SDK 1.1.0</span></div>
+   <div class="fc-intro"><div class="fc-logo"><span class="fc-logo-mark">◉</span><div><strong>FaceCheck</strong><small>Face matching & guided liveness</small></div></div><span class="fc-version">SDK 1.2.0</span></div>
    <div class="fc-how"><span><b>1</b> Add reference</span><span><b>2</b> Choose test</span><span><b>3</b> Get result</span></div>
    <section class="fc-health" data-fc="healthPanel" aria-live="polite"><div class="fc-health-heading"><strong data-fc="healthHeading">Checking offline face model…</strong><button type="button" class="fc-btn fc-mini-btn" data-fc="healthRetry">Check again</button></div><p data-fc="healthDetails">The face model files must be installed on this website before recognition can run.</p><div class="fc-health-actions"><button type="button" class="fc-btn fc-mini-btn" data-fc="clearCache">Clear app cache & reload</button><a data-fc="manifestLink" href="./assets-manifest.json" target="_blank" rel="noopener">View installation manifest</a></div></section>
    <section class="fc-card" ${this.showReferencePicker?'':'hidden'}><div class="fc-section"><div><h2>Reference face</h2><p>Use a clear face photo, or take one now.</p></div><span class="fc-mini">Step 1</span></div>
@@ -46,10 +47,27 @@ export class FaceCheckWidget extends EventTarget{
       <p class="fc-ref-help" data-fc="referenceCameraStatus" role="status">Your picture stays on this device. This is a reference photo, not a liveness check.</p>
     </div>
    </section>
-   <section class="fc-card"><div class="fc-section"><div><h2>Choose a check</h2><p>One simple step to see how closely two faces match.</p></div><span class="fc-mini">Step 2</span></div>
-    <div class="fc-mode-grid"><button class="fc-mode selected" data-fc="liveMode"><div class="fc-mode-ico">${icon('shield',20)}</div><b>Live face check</b><small>Camera + random motions + face match</small></button><button class="fc-mode" data-fc="photoMode"><div class="fc-mode-ico">${icon('upload',20)}</div><b>Compare two photos</b><small>Similarity test only, not live verification</small></button></div>
+   <section class="fc-card"><div class="fc-section"><div><h2>Choose a check</h2><p>Choose the type of face check you need.</p></div><span class="fc-mini">Step 2</span></div>
+    <div class="fc-mode-grid"><button class="fc-mode selected" data-fc="liveMode"><div class="fc-mode-ico">${icon('shield',20)}</div><b>Live face check</b><small>Camera + random motions + face match</small></button><button class="fc-mode" data-fc="photoMode"><div class="fc-mode-ico">${icon('upload',20)}</div><b>Compare two photos</b><small>Similarity test only, not live verification</small></button><button class="fc-mode" data-fc="groupMode"><div class="fc-mode-ico">${icon('users',20)}</div><b>Find in group</b><small>Locate your reference in a photo or group camera</small></button></div>
     <div data-fc="liveConfig" class="fc-config"><details><summary>Challenge preferences <span>Optional</span></summary><div class="fc-settings"><p>Three randomized movements, followed by holding still. Enabled actions apply to this demo only.</p><div class="fc-config-chips">${['blink','turn','pitch','smile'].map(a=>`<label><input type="checkbox" data-action-toggle="${a}" checked> ${LABELS[a]}</label>`).join('')}</div><p class="fc-config-hint">Full-security policies must be enforced by the hosting application, not the user interface.</p></div></details></div>
     <div data-fc="photoInputArea" hidden class="fc-photo-upload"><label class="fc-btn fc-solid fc-wide">${icon('upload')} Choose comparison photo<input data-fc="compareFile" type="file" accept="image/jpeg,image/png,image/webp" hidden></label><p>Uploads are allowed for a <b>similarity test</b>. No liveness claim will be made.</p></div>
+    <div data-fc="groupInputArea" class="fc-group-area" hidden>
+      <div class="fc-group-intro"><strong>${icon('users',18)} Find a face in a group</strong><p>Place your reference selfie/photo above. Then choose a group image or open the camera. We'll highlight a likely match—never mark attendance automatically.</p></div>
+      <label class="fc-consent"><input type="checkbox" data-fc="groupConsent"> I have permission to compare the faces in this image.</label>
+      <div class="fc-group-actions"><label class="fc-btn fc-solid">${icon('upload')} Upload group photo<input data-fc="groupFile" type="file" accept="image/jpeg,image/png,image/webp" hidden></label><button class="fc-btn" data-fc="openGroup" type="button">${icon('camera')} Open group camera</button></div>
+      <div data-fc="groupCameraPanel" class="fc-group-camera" hidden>
+        <div class="fc-group-camera-head"><strong>Group camera</strong><span>Position everyone inside the frame</span></div>
+        <div class="fc-group-live"><video data-fc="groupVideo" playsinline autoplay muted></video><div class="fc-group-top-hint">Make sure all faces are visible</div></div>
+        <div class="fc-group-actions"><button class="fc-btn fc-solid" data-fc="scanGroup">${icon('focus')} Find matching person</button><button class="fc-btn" data-fc="closeGroup">Close</button></div>
+      </div>
+      <div class="fc-group-results" data-fc="groupResults" hidden>
+        <div class="fc-group-result-heading"><b data-fc="groupTitle">Group photo analysed</b><span data-fc="groupCount">0 faces</span></div>
+        <canvas data-fc="groupCanvas" aria-label="Group photo with numbered face highlights"></canvas>
+        <p class="fc-group-message" data-fc="groupMessage">Each detected face receives a number.</p>
+        <div data-fc="groupList" class="fc-group-list"></div>
+        <p class="fc-group-privacy">Group results are suggestions only. Liveness was not tested; human confirmation is required before attendance.</p>
+      </div>
+    </div>
     <button data-fc="startLive" class="fc-btn fc-solid fc-wide fc-go">${icon('camera')} Start guided camera check</button>
     <p class="fc-status" data-fc="status" role="status">Choose a reference face to begin.</p>
     <div data-fc="cameraPanel" class="fc-camera-panel" hidden>
@@ -77,17 +95,102 @@ export class FaceCheckWidget extends EventTarget{
     this.n('clearCache').addEventListener('click',()=>this.clearAppCache());
     this.n('liveMode').addEventListener('click',()=>this.setMode('live'));
     this.n('photoMode').addEventListener('click',()=>this.setMode('photo'));
+    this.n('groupMode').addEventListener('click',()=>this.setMode('group'));
+    this.n('groupFile').addEventListener('change',e=>{const f=e.target.files?.[0];if(f)this.inspectGroupFile(f).catch(err=>this.groupError(err));e.target.value='';});
+    this.n('openGroup').addEventListener('click',()=>this.openGroupCamera().catch(err=>this.groupError(err)));
+    this.n('scanGroup').addEventListener('click',()=>this.scanGroupCamera().catch(err=>this.groupError(err)));
+    this.n('closeGroup').addEventListener('click',()=>this.stopGroupCamera());
     this.n('startLive').addEventListener('click',()=>this.startLiveVerification().catch(e=>this.error(e)));
     this.n('cancel').addEventListener('click',()=>this.stopCamera());
-    this.visibilityHandler=()=>{if(document.hidden&&(this.camera||this.referenceCamera)){this.stopCamera();this.stopReferenceCamera();this.status('Camera was closed because you left the page. Start again for privacy.');}};
+    this.visibilityHandler=()=>{if(document.hidden&&(this.camera||this.referenceCamera||this.groupCamera)){this.stopCamera();this.stopReferenceCamera();this.stopGroupCamera();this.status('Camera was closed because you left the page. Start again for privacy.');}};
     document.addEventListener('visibilitychange',this.visibilityHandler);
     this.checkInstallation().catch(()=>{});
   }
-  async setReference(input){this.status('Checking the reference face…');const data=await this.engine.setReference(input);this.n('referenceImage').src=data.preview;this.n('referenceImage').hidden=false;this.n('referenceFrame').querySelector('.fc-ph-placeholder').hidden=true;this.n('referenceLabel').textContent='Reference face is ready';this.status('Reference is ready. Choose a live check or compare two photos.','good');this.n('resultBox').hidden=true;this.stopReferenceCamera();this.emit('reference',{status:'ready',quality:{detectionConfidence:Math.round(data.confidence*100)}});return data;}
-  setMode(mode){if(!['live','photo'].includes(mode))return;this.stopCamera();this.stopReferenceCamera();this.mode=mode;this.n('liveMode').classList.toggle('selected',mode==='live');this.n('photoMode').classList.toggle('selected',mode==='photo');this.n('startLive').hidden=mode==='photo';this.n('photoInputArea').hidden=mode!=='photo';this.n('liveConfig').hidden=mode==='photo';this.n('resultBox').hidden=true;this.status(mode==='live'?'Live mode needs the camera and movements.':'Photo mode compares two saved images only — not live verification.');}
+  async setReference(input){this.status('Checking the reference face…');const data=await this.engine.setReference(input);this.n('referenceImage').src=data.preview;this.n('referenceImage').hidden=false;this.n('referenceFrame').querySelector('.fc-ph-placeholder').hidden=true;this.n('referenceLabel').textContent='Reference face is ready';this.status('Reference is ready. Choose a live check, photo comparison, or group search.','good');this.n('resultBox').hidden=true;this.n('groupResults').hidden=true;this.stopReferenceCamera();this.emit('reference',{status:'ready',quality:{detectionConfidence:Math.round(data.confidence*100)}});return data;}
+  setMode(mode){if(!['live','photo','group'].includes(mode))return;this.stopCamera();this.stopReferenceCamera();this.stopGroupCamera();this.mode=mode;
+    for(const m of ['live','photo','group'])this.n(m+'Mode').classList.toggle('selected',mode===m);
+    this.n('startLive').hidden=mode!=='live';this.n('photoInputArea').hidden=mode!=='photo';this.n('groupInputArea').hidden=mode!=='group';this.n('liveConfig').hidden=mode!=='live';
+    this.n('resultBox').hidden=true;
+    this.status(mode==='live'?'Live check requires one person, camera and gestures.':mode==='photo'?'Two-photo similarity test only — not live verification.':'Group mode searches for one reference face among multiple people. No liveness or automatic attendance.');}
   status(message,type=''){const node=this.n('status');node.textContent=message;node.dataset.status=type;}
   error(e){this.status(e.message||String(e),'bad');this.emit('error',{message:e.message||String(e)});}
   async comparePhotos(file){if(!this.engine.reference)throw Error('Please add your reference photo first.');this.status('Comparing the two photos on your device…');const r=await this.engine.compare(file);this.showResult(r);return r;}
+  requireGroupConsent(){
+    if(!this.engine.reference)throw Error('First upload or take one clear reference selfie above.');
+    if(!this.n('groupConsent').checked)throw Error('Please confirm you have permission to compare faces in the group.');
+  }
+  groupError(err){this.groupBusy=false;this.status(err?.message||String(err),'bad');this.emit('error',{kind:'group',message:err?.message||String(err)});}
+  async inspectGroupFile(file){
+    this.requireGroupConsent();this.stopGroupCamera();const token=++this.groupToken;this.groupBusy=true;
+    this.n('groupResults').hidden=true;this.status('Looking for faces in your group photo…');
+    try{const canvas=await this.engine.prepareImage(file,1800);
+      const result=await this.engine.findReferenceInGroup(canvas,{source:'image'});
+      if(token!==this.groupToken||this.mode!=='group')return;
+      this.showGroupResult(canvas,result);return result;
+    }finally{this.groupBusy=false;}
+  }
+  async openGroupCamera(){
+    this.requireGroupConsent();this.stopCamera();this.stopReferenceCamera();this.stopGroupCamera();
+    if(!navigator.mediaDevices?.getUserMedia)throw Error('Camera requires HTTPS/localhost and permission.');
+    const token=++this.groupToken;
+    const video=this.n('groupVideo');this.n('groupCameraPanel').hidden=false;
+    this.status('Opening camera. Keep everyone visible with good lighting.');
+    try{const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:960}},audio:false});
+      if(token!==this.groupToken||this.mode!=='group'){stream.getTracks().forEach(t=>t.stop());return;}
+      this.groupCamera=stream;video.srcObject=stream;await video.play();
+      this.n('groupCameraPanel').scrollIntoView?.({behavior:'smooth',block:'nearest'});
+      this.status('All faces visible? Tap Find matching person. The camera will capture one frame.');
+    }catch(e){this.stopGroupCamera();throw Error('Could not open the camera: '+e.message);}
+  }
+  async scanGroupCamera(){
+    this.requireGroupConsent();if(this.groupBusy)return;
+    if(!this.groupCamera?.getVideoTracks().some(t=>t.readyState==='live'))throw Error('Camera is not open.');
+    this.groupBusy=true;this.n('scanGroup').disabled=true;
+    const token=this.groupToken;
+    this.status('Checking all visible faces against your reference…');
+    try{const frame=await this.engine.captureFrame(this.n('groupVideo'));
+      const result=await this.engine.findReferenceInGroup(frame,{source:'camera'});
+      if(token!==this.groupToken||this.mode!=='group')return;
+      this.stopGroupCamera();this.showGroupResult(frame,result);return result;
+    }finally{this.groupBusy=false;this.n('scanGroup').disabled=false;}
+  }
+  stopGroupCamera(){
+    this.groupToken++;
+    if(this.groupCamera)this.groupCamera.getTracks().forEach(t=>t.stop());
+    this.groupCamera=null;const v=this.n('groupVideo');if(v)v.srcObject=null;
+    const panel=this.n('groupCameraPanel');if(panel)panel.hidden=true;
+  }
+  showGroupResult(image,r){
+    if(this.mode!=='group')return;
+    const board=this.n('groupCanvas'),ctx=board.getContext('2d');board.width=image.width;board.height=image.height;
+    ctx.drawImage(image,0,0,board.width,board.height);
+    const base=Math.max(2,Math.round(board.width/390)*2),font=Math.max(15,Math.min(38,board.width/34));
+    const winner=r.best?.index;
+    for(const f of r.candidates){
+      const isBest=f.index===winner,accepted=isBest&&r.result==='possible_match',border=accepted?'#1aac70':isBest?'#d9a23e':'#f0f5f7';
+      const {x,y,width,height}=f.box;
+      ctx.lineWidth=base*(accepted?2.2:1.5);ctx.strokeStyle=border;
+      ctx.strokeRect(x,y,width,height);
+      const label=`Face ${f.index}`+(accepted?' · possible match':isBest?' · closest':'');
+      ctx.font=`700 ${font}px ui-sans-serif,system-ui,sans-serif`;
+      const lw=ctx.measureText(label).width+font*.9,lh=font*1.65;
+      const lx=Math.max(0,Math.min(board.width-lw,x)),ly=Math.max(lh,Math.min(board.height,y));
+      ctx.fillStyle=accepted?'#11774f':isBest?'#90680e':'#1d2b33';ctx.fillRect(lx,ly-lh,lw,lh);
+      ctx.fillStyle='#ffffff';ctx.fillText(label,lx+font*.4,ly-font*.43);
+    }
+    const label=r.result==='possible_match'?'Possible match found':r.result==='review'?'Needs review':r.result==='no_faces'?'No faces found':'No reliable match';
+    this.n('groupTitle').textContent=label;this.n('groupCount').textContent=r.detectedFaces+' face'+(r.detectedFaces===1?'':'s')+' detected';
+    this.n('groupMessage').textContent=r.explanation;
+    const list=this.n('groupList');list.replaceChildren();
+    for(const face of r.candidates){const b=document.createElement('div');b.className='fc-group-face';
+      const tag=document.createElement('strong');tag.textContent=`Face ${face.index}`+(face===r.best?' · closest':'');
+      const val=document.createElement('span');val.textContent=face.similarityIndex+'% similarity index · distance '+face.distance.toFixed(3)+(face.facePixels<65?' · small face':'');
+      b.append(tag,val);list.append(b);}
+    this.n('groupResults').hidden=false;this.n('resultBox').hidden=true;
+    this.status(label+' · '+r.detectedFaces+' face(s) compared. Requires human review; no attendance has been marked.',r.result==='possible_match'?'good':'');
+    this.emit('result',r);this.latestResult=r;
+    this.n('groupResults').scrollIntoView?.({behavior:'smooth',block:'nearest'});
+  }
   async openCamera(){this.stopReferenceCamera();if(!navigator.mediaDevices?.getUserMedia)throw Error('Camera requires HTTPS (or localhost) and permission.');const stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user',width:{ideal:960},height:{ideal:1280},frameRate:{ideal:24}}});
     this.camera=stream;this.n('video').srcObject=stream;await this.n('video').play();this.n('cameraPanel').hidden=false;this.n('startLive').hidden=true;this.n('takeRef').disabled=true;return stream;}
   async openReferenceCamera(){
@@ -133,7 +236,7 @@ export class FaceCheckWidget extends EventTarget{
       const manifestResponse=await fetch(expectedManifest,{cache:'no-store'});
       if(!manifestResponse.ok)throw Error('Deployment manifest not found (HTTP '+manifestResponse.status+'). Your Pages site may be publishing source files instead of the GitHub Actions build.');
       const manifest=await manifestResponse.json();
-      if(manifest.built!==true||manifest.sdk!=='1.1.0')throw Error('Outdated or incomplete deployment manifest. Run “Publish FaceCheck SDK demo” and ensure Pages Source is GitHub Actions.');
+      if(manifest.built!==true||manifest.sdk!=='1.2.0')throw Error('Outdated or incomplete deployment manifest. Run “Publish FaceCheck SDK demo” and ensure Pages Source is GitHub Actions.');
       const issues=[];
       for(const path of files){
         const url=new URL(path,root);
@@ -150,7 +253,7 @@ export class FaceCheckWidget extends EventTarget{
   }
   async clearAppCache(){
     if(!confirm('Remove only FaceCheck cached files and reload? This does not delete your GitHub files.'))return;
-    this.stopCamera();this.stopReferenceCamera();
+    this.stopCamera();this.stopReferenceCamera();this.stopGroupCamera();
     if('serviceWorker' in navigator)for(const reg of await navigator.serviceWorker.getRegistrations()){if(reg.scope.startsWith(new URL('./',location.href).href))await reg.unregister();}
     if('caches' in window)for(const key of await caches.keys()){if(key.startsWith('facecheck-sdk-'))await caches.delete(key);}
     location.reload();
@@ -185,6 +288,6 @@ export class FaceCheckWidget extends EventTarget{
     this.n('resultInfo').textContent=live?'Prototype motion challenge completed. This is not certified identity verification.':'Photo-to-photo comparison only. No live person was verified.';
     this.n('metrics').textContent=`Similarity index ${r.similarityIndex}% (not probability) · Face distance ${r.distance} · ${live?'Live challenge passed':'No liveness check'}`;
     this.status('Comparison completed locally.');this.emit('result',r);}
-  stopCamera(){this.run++;cancelAnimationFrame(this.raf);if(this.camera)this.camera.getTracks().forEach(t=>t.stop());this.camera=null;this.cameraMode=null;this.state='idle';if(this.n('video'))this.n('video').srcObject=null;if(this.n('retry')){this.n('retry').onclick=null;this.n('retry').hidden=true;}if(this.n('cameraPanel'))this.n('cameraPanel').hidden=true;if(this.n('startLive'))this.n('startLive').hidden=this.mode==='photo';if(this.n('takeRef'))this.n('takeRef').disabled=false;}
-  destroy(){this.stopCamera();this.stopReferenceCamera();document.removeEventListener('visibilitychange',this.visibilityHandler);this.engine.destroy();this.el.replaceChildren();}
+  stopCamera(){this.run++;cancelAnimationFrame(this.raf);if(this.camera)this.camera.getTracks().forEach(t=>t.stop());this.camera=null;this.cameraMode=null;this.state='idle';if(this.n('video'))this.n('video').srcObject=null;if(this.n('retry')){this.n('retry').onclick=null;this.n('retry').hidden=true;}if(this.n('cameraPanel'))this.n('cameraPanel').hidden=true;if(this.n('startLive'))this.n('startLive').hidden=this.mode!=='live';if(this.n('takeRef'))this.n('takeRef').disabled=false;}
+  destroy(){this.stopCamera();this.stopReferenceCamera();this.stopGroupCamera();document.removeEventListener('visibilitychange',this.visibilityHandler);this.engine.destroy();this.el.replaceChildren();}
 }

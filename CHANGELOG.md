@@ -1,11 +1,15 @@
-# FaceCheck SDK v1.1.0 · 22 October 2026
+# FaceCheck SDK — Changes
 
-- Added portrait selfie camera **inline** inside the reference-photo step, with framing guide, capture/cancel, retake on face-detection error, and automatic preview after successful capture.
-- Separated reference camera lifecycle from the live challenge camera to avoid unexpected camera position changes.
-- Added a built-asset health panel, deployment troubleshooting, and a version-specific installation manifest check.
-- Improved missing-library error messages, cache reset controls, and Safari/mobile layout.
-- Bumped service-worker cache to `facecheck-sdk-v1.1-static` to replace earlier cached files.
-- Preserved photo-to-photo similarity (without liveness) and camera-only guided liveness + match as clearly distinct modes.
-- This source package still requires GitHub Actions to fetch local JS libraries and AI model weights. The binaries are **not** included inside the ZIP.
+## v1.2.0 · 22 October 2026
 
-Validation: Node engine tests, syntax checks, and headless simulated-camera UX smoke tests passed. True biometric inference, model downloading through GitHub Actions, physical iPhone cameras, and anti-spoof robustness were not exercised here.
+- Added **Find in Group** in the standalone demo (reference selfie/photo against multiple people in an uploaded group picture or a rear-camera snapshot).
+- Added `FaceCheckEngine.findReferenceInGroup(...)` and pure `rankGroupCandidates(...)` with quality/margin gates and four explicit results.
+- Added numbered overlay boxes, highlighted candidate, ranking metrics and clear warnings that group matching does not verify liveness or authorize attendance.
+- Added group consent control, mobile-first group camera preview and compact action buttons.
+- Retained existing reference camera, two-photo comparison and one-face randomized live liveness flows.
+- Updated `assets-manifest.json` build version, cache version and the source verifier's valid small entry-point check.
+- Added unit tests for no match, ambiguities, weak/small faces and clear matches, plus simulated upload/camera UI smoke tests.
+
+## v1.1.0
+
+- Inline reference selfie camera, deployment checks and offline model setup diagnostics.

@@ -1,4 +1,4 @@
-/** FaceCheck Engine v1.1 — local-only face detection / matching / guided-motion prototype.
+/** FaceCheck Engine v1.2 — local-only face detection / matching / guided-motion prototype.
  * Not official authentication. No PAD certification; can be fooled by replay to camera.
  */
 export const DEFAULT_POLICY = Object.freeze({
@@ -15,7 +15,7 @@ function randOrder(a){let b=[...a];const bytes=new Uint32Array(Math.max(1,b.leng
 function getBox(landmarks){const xs=landmarks.map(x=>x.x),ys=landmarks.map(x=>x.y);const left=Math.min(...xs),right=Math.max(...xs),top=Math.min(...ys),bottom=Math.max(...ys);return {x:(left+right)/2,y:(top+bottom)/2,w:right-left,h:bottom-top};}
 function average(rows,field){return rows.reduce((s,r)=>s+r[field],0)/Math.max(1,rows.length);}
 function safeImageInput(file){if(!(file instanceof Blob))abort('Choose a JPEG, PNG, or WebP photo.');if(!['image/jpeg','image/png','image/webp'].includes(file.type))abort('Only JPEG, PNG and WebP images are supported.');if(file.size>12e6)abort('Please use an image smaller than 12 MB.');return file;}
-async function fileToCanvas(file){safeImageInput(file);const img=await createImageBitmap(file);try {if(img.width<90||img.height<90)abort('This image is too small. Use a clearer face photo.');const scale=Math.min(1,1400/Math.max(img.width,img.height));const c=document.createElement('canvas');c.width=Math.max(1,Math.floor(img.width*scale));c.height=Math.max(1,Math.floor(img.height*scale));c.getContext('2d',{willReadFrequently:true}).drawImage(img,0,0,c.width,c.height);return c;}finally{img.close();}}
+async function fileToCanvas(file,maxDimension=1400){safeImageInput(file);const img=await createImageBitmap(file);try {if(img.width<90||img.height<90)abort('This image is too small. Use a clearer face photo.');const scale=Math.min(1,maxDimension/Math.max(img.width,img.height));const c=document.createElement('canvas');c.width=Math.max(1,Math.floor(img.width*scale));c.height=Math.max(1,Math.floor(img.height*scale));c.getContext('2d',{willReadFrequently:true}).drawImage(img,0,0,c.width,c.height);return c;}finally{img.close();}}
 async function frameToCanvas(video){if(!video.videoWidth)abort('Camera is not ready');const c=document.createElement('canvas');c.width=video.videoWidth;c.height=video.videoHeight;c.getContext('2d').drawImage(video,0,0);return c;}
 export function normalizePolicy(policy={}){
   const p={...DEFAULT_POLICY,...policy};
@@ -26,6 +26,32 @@ export function normalizePolicy(policy={}){
   p.matchDistance=clamp(Number(p.matchDistance)||.48,.30,.70);
   p.reviewDistance=clamp(Number(p.reviewDistance)||.60,p.matchDistance+.02,.80);
   return p;
+}
+/** Pure group ranking rules, separate from ML. Never force a top-ranked face to be a match.
+ * The returned similarity index is illustrative, not the probability of identity.
+ */
+export function rankGroupCandidates(candidates,{matchDistance=.48,reviewDistance=.60,ambiguityMargin=.08,minFacePixels=65}={}){
+  const scored=(candidates||[]).map((c,i)=>({
+    index:i+1,
+    box:{x:c.box.x,y:c.box.y,width:c.box.width,height:c.box.height},
+    distance:c.distance,
+    similarityIndex:clamp(Math.round((1.30-c.distance)*100),0,100),
+    detectorConfidence:c.confidence,
+    facePixels:Math.min(c.box.width,c.box.height),
+    quality:c.quality||null
+  })).filter(c=>Number.isFinite(c.distance)).sort((a,b)=>a.distance-b.distance);
+  if(!scored.length)return {result:'no_faces',best:null,candidates:[],gap:null,explanation:'No face detected. Move closer or use a clearer photo.'};
+  const [best,second]=scored;
+  const gap=second?second.distance-best.distance:null;
+  const tooSmall=best.facePixels<minFacePixels;
+  const ambiguous=second&&gap<ambiguityMargin;
+  let result='no_match';
+  if(best.distance<=matchDistance&&!tooSmall&&!ambiguous)result='possible_match';
+  else if(best.distance<=reviewDistance)result='review';
+  const explanation=result==='possible_match'?'A likely matching face was located. Please confirm visually before taking any action.'
+    :result==='review'?(tooSmall?'The closest face is small or unclear. Move closer for a more reliable match.':ambiguous?'Two people look similarly close to the reference. Please review.':'The closest face is borderline. A clearer image or individual check is needed.')
+    :'No sufficiently similar face was found in this image.';
+  return {result,best:best||null,candidates:scored,gap:gap==null?null:Math.round(gap*1000)/1000,explanation};
 }
 export class FaceCheckEngine{
   constructor(opts={}){this.baseUrl=new URL(opts.baseUrl||'./assets/',document.baseURI);this.policy=normalizePolicy(opts.policy);this.faceApi=null;this.mp=null;this.mpPromise=null;this.facePromise=null;this.challenge=null;this.reference=null;this.lastData=null;}
@@ -50,6 +76,34 @@ export class FaceCheckEngine{
     if(detections.length!==1)abort(detections.length===0?'I could not find a clear face. Use a well-lit, front-facing photo.':'Please use a photo containing only one person.');
     const face=detections[0]; const confidence=face.detection.score;
     return {descriptor:face.descriptor,confidence,box:face.detection.box};
+  }
+  /** Find a reference face within a GROUP photo or a captured CAMERA frame.
+   * No liveness claim; no identity/attendance authorization. The caller must confirm.
+   * Only the original reference may contain exactly one face.
+   */
+  async prepareImage(input,maxDimension=1800){
+    if(input instanceof HTMLCanvasElement)return input;
+    return fileToCanvas(input,maxDimension);
+  }
+  async findReferenceInGroup(input,{maxFaces=10,source='image',matchDistance=this.policy.matchDistance,
+    reviewDistance=this.policy.reviewDistance,ambiguityMargin=.08,minFacePixels=65}={}){
+    if(!this.reference)abort('Please add your reference selfie/photo first.');
+    const image=await this.prepareImage(input,1800);
+    if(image.width<160||image.height<160)abort('Group photo is too small. Use a clearer image.');
+    await this.faceModels();
+    const api=this.faceApi;
+    const count=clamp(Math.floor(Number(maxFaces)||10),2,15);
+    const detections=await api.detectAllFaces(image,new api.SsdMobilenetv1Options({minConfidence:.30,maxResults:count})).withFaceLandmarks().withFaceDescriptors();
+    const measured=detections.map(face=>({
+      distance:api.euclideanDistance(this.reference.descriptor,face.descriptor),
+      confidence:face.detection.score,
+      box:face.detection.box
+    }));
+    const ranking=rankGroupCandidates(measured,{matchDistance,reviewDistance,ambiguityMargin,minFacePixels});
+    return {type:source==='camera'?'group_camera_similarity':'group_photo_similarity',
+      ...ranking,detectedFaces:detections.length,imageWidth:image.width,imageHeight:image.height,
+      liveness:'not_performed',verifiedIdentity:false,attendanceAuthorized:false,
+      notice:'Reference-to-group similarity only. No person has passed liveness. Do not mark attendance automatically.'};
   }
   async setReference(input){const canvas=input instanceof HTMLCanvasElement?input:await fileToCanvas(input);const face=await this.faceDescriptor(canvas);this.reference={...face,canvas};return {confidence:face.confidence,preview:canvas.toDataURL('image/jpeg',.85)};}
   async compare(input,{liveProof=null,referenceLabel='user-supplied reference'}={}){
