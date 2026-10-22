@@ -17,7 +17,7 @@ for name in ('ssd_mobilenetv1_model-weights_manifest.json','face_landmark_68_mod
  MIN[f'assets/models/{name}']=100
 for name in ('ssd_mobilenetv1_model-shard1','ssd_mobilenetv1_model-shard2','face_landmark_68_model-shard1','face_recognition_model-shard1','face_recognition_model-shard2'):
  MIN[f'assets/models/{name}']=5000
-SOURCE=['index.html','main.js','sw.js','src/index.js','src/widget.js','src/engine.js','styles/facecheck.css']
+SOURCE=['index.html','main.js','sw.js','package.json','src/index.js','src/widget.js','src/engine.js','styles/facecheck.css']
 for f in SOURCE:
  path=root/f
  if not path.is_file() or path.stat().st_size <(40 if f=='src/index.js' else 200):sys.exit(f'MISSING/INVALID SDK code in publish directory: {f}')
@@ -36,9 +36,12 @@ for fname in ('ssd_mobilenetv1_model','face_landmark_68_model','face_recognition
  except Exception as e:sys.exit(f'Invalid model manifest: {manifest}: {e}')
  for shard in shards:
   if not (manifest.parent/shard).is_file():sys.exit(f'Unresolved weight shard {shard} in {fname}')
+sdk_version=json.loads((root/'package.json').read_text())['version']
 if root == Path('.'):
- (root/'assets-manifest.json').write_text(json.dumps({'built':True,'sdk':'1.2.0','files':files},indent=2))
+ (root/'assets-manifest.json').write_text(json.dumps({'built':True,'sdk':sdk_version,'files':files},indent=2))
 else:
  p=root/'assets-manifest.json'
- if not p.is_file() or json.loads(p.read_text()).get('sdk')!='1.2.0':sys.exit('Missing/old final asset manifest')
+ if not p.is_file():sys.exit('Missing final asset manifest')
+ manifest=json.loads(p.read_text())
+ if manifest.get('built') is not True or manifest.get('sdk')!=sdk_version:sys.exit(f'Missing/old final asset manifest. Expected {sdk_version}')
 print(f'OK: {len(files)} self-hosted asset files verified, {sum(x["bytes"] for x in files)/1e6:.1f} MB')
